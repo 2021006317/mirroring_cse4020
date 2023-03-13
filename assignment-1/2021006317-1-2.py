@@ -10,11 +10,12 @@ for i in range(5):
     M[i][0] = 0
 print(M)
 
-M = M*M
+M = M@M
 print(M)
 
 mv=0
 for i in range(5):
+    M[0][i] *= M[0][i]
     mv += M[0][i]
 mv=np.sqrt(mv)
 print(mv)
