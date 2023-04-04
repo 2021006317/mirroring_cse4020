@@ -5,52 +5,45 @@ import numpy as np
 
 def key_callback(window, key, scancode, action, mods):
     global M
-    if key == glfw.KEY_Q:
-        T = np.array([[1.,0., -.1],
-                      [0.,1.,0.],
-                      [0.,0.,1.]])
-        M=T@M
-        print('Q')
-    elif key == glfw.KEY_E:
-        T = np.array([[1.,0., .1],
-                      [0.,1.,0.],
-                      [0.,0.,1.]])
-        M=T@M
-        print('E')
-    elif key == glfw.KEY_A:
-        th = np.radians(10)
-        R = np.array([[np.cos(th),-np.sin(th), 0.],
-                      [np.sin(th), np.cos(th),0.],
-                      [0.,0.,1.]])
-        M=M@R
-        print('A')
-    
-    elif key == glfw.KEY_D:
-        th = np.radians(10)
-        R = np.array([[np.cos(th), np.sin(th), 0.],
-                      [-np.sin(th), np.cos(th),0.],
-                      [0.,0.,1.]])
-        M=M@R
-        print('D')
-    elif key == glfw.KEY_1:
-        T = np.array([[1.,0.,0.],
-                      [0.,1.,0.],
-                      [0.,0.,1.]])
-        M=T
-        print('1')
-    elif key == glfw.KEY_W:
-        S = np.array([[.9,0.,0.],
-                      [0.,1.,0.],
-                      [0.,0.,1]])
-        M=S@M
-        print('W')
-    elif key == glfw.KEY_S:
-        th = np.radians(10)
-        R = np.array([[np.cos(th),-np.sin(th), 0.],
-                      [np.sin(th), np.cos(th),0.],
-                      [0.,0.,1.]])
-        M=R@M
-        print('S')
+    if action == glfw.PRESS:
+        if key == glfw.KEY_Q:
+            T = np.array([[1.,0., -.1],
+                        [0.,1.,0.],
+                        [0.,0.,1.]])
+            M=T@M
+        elif key == glfw.KEY_E:
+            T = np.array([[1.,0., .1],
+                        [0.,1.,0.],
+                        [0.,0.,1.]])
+            M=T@M
+        elif key == glfw.KEY_A:
+            th = np.radians(10)
+            R = np.array([[np.cos(th),-np.sin(th), 0.],
+                        [np.sin(th), np.cos(th),0.],
+                        [0.,0.,1.]])
+            M=M@R
+        elif key == glfw.KEY_D:
+            th = np.radians(10)
+            R = np.array([[np.cos(th), np.sin(th), 0.],
+                        [-np.sin(th), np.cos(th),0.],
+                        [0.,0.,1.]])
+            M=M@R
+        elif key == glfw.KEY_1:
+            T = np.array([[1.,0.,0.],
+                        [0.,1.,0.],
+                        [0.,0.,1.]])
+            M=T
+        elif key == glfw.KEY_W:
+            S = np.array([[.9,0.,0.],
+                        [0.,1.,0.],
+                        [0.,0.,1]])
+            M=S@M
+        elif key == glfw.KEY_S:
+            th = np.radians(10)
+            R = np.array([[np.cos(th),-np.sin(th), 0.],
+                        [np.sin(th), np.cos(th),0.],
+                        [0.,0.,1.]])
+            M=R@M
     
 def render(T):
     glClear(GL_COLOR_BUFFER_BIT)
