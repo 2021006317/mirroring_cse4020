@@ -38,7 +38,7 @@ def main():
     viewHeight=1.0 # ""
     projDistance=1.0 # d. image 사각형 ~ projection center distance. 근데? projection center 이 viewpoint 라고 하네요.
     intensity=np.array([1,1,1]).astype(np.float64)  # how bright the light is.
-        
+    position=np.array([0,0,0]).astype(np.float64)
     center = []
     radius = []
     imgSize=np.array(root.findtext('image').split()).astype(np.int32) # 300 300
@@ -62,12 +62,10 @@ def main():
     shader = []
     for c in root.findall('shader'):
         diffuseColor_c=np.array(c.findtext('diffuseColor').split()).astype(np.float64)
-        shader.append((c.get('name'), diffuseColor_c))
+        shader.append((c.get('name'), diffuseColor_c, c.get('type')))
         print('name', c.get('name'))
         print('diffuseColor', diffuseColor_c)
     print('shaders are', shader)
-    print(shader[0][1])
-    print(type(shader[0][1]))
 
     count=0
     for c in root.findall('surface'):
@@ -82,7 +80,6 @@ def main():
         position = np.array(c.findtext('position').split()).astype(np.float64)
         intensity = np.array(c.findtext('intensity').split()).astype(np.float64)
 
-    # print('surfaces are', surface)
 
     # 방향 유닛 벡터
     def unit_dir(dir):
@@ -100,8 +97,9 @@ def main():
     def vector_os(e, ud, lr, n, i, j):
         center_x = imgSize[0]/2
         center_y = imgSize[1]/2
+
         #! imgWidth, imgHeight
-        s = e + lr*(i-center_x) + ud*(j-center_y) - 400*n
+        s = e + lr*(i-center_x) + ud*(j-center_y) - 400 * n
         return s
     
     # Create an empty image
@@ -128,6 +126,8 @@ def main():
                 return quadratic_min
             elif quadratic_max>=0:
                 return quadratic_max
+            else:
+                return 9999999999
         else:
             return 9999999999
     
@@ -140,10 +140,10 @@ def main():
                 idx=i
         return (min,idx)
     
-    # kd: 물체의 색, I: 빛의 밝기(색) , max(0, n'l): 면적당 받는 빛의 양(밝기)
+    # kd: 물체의 밝기, I: 빛의 밝기(색) , max(0, n'l): 면적당 받는 빛의 양(밝기)
     def shading(kd, I, n, l):
         m = max(0, np.dot(n,l))
-        ldm = np.dot(kd, I)
+        ldm = np.array([kd[0] * I[0], kd[1] * I[1], kd[2] * I[2]])
         ld = ldm*m
         return ld
     
@@ -152,23 +152,35 @@ def main():
     window = viewPoint + unit_dir(viewDir)
     print(f'window ray is {window}')
 
+    black=Color(0,0,0)
     for i in np.arange(imgSize[0]): # 0~299
         for j in np.arange(imgSize[1]):
                 distance=[]
+                img[j][i] = black.toUINT8()
                 for k in range(count):
-                    #print((i,j))
-                    black=Color(0,0,0)
-                    img[j][i] = black.toUINT8()
                     direction = np.array([])
-                    direction = vector_os(window, up, right, n, i, j) - viewPoint
+                    dot = vector_os(window, up, right, n, i, j)
+                    direction = dot - viewPoint
                     direction = unit_dir(direction)
-                    intersect = intersection(viewPoint, direction, center[k], radius[k]) #k
+                    intersect = intersection(viewPoint, direction, center[k], radius[k])
                     distance.append(intersect)
-                # print(distance)
-                clr = find_min(distance)[1]
-                # print(clr)
+                intersect, clr = find_min(distance)
                 if intersect != 9999999999:
-                    img[j][i] = Color(shader[clr][1][0], shader[clr][1][1], shader[clr][1][2]).toUINT8()
+                    
+                    if shader[clr][2] == 'Lambertian':
+                        distance_from_light=[]
+                        # for kk in range(count):
+                        vec_os = position + intersect*direction # 구 위의 교점 oc
+                        vec_n = vec_os - center[clr] # 교점의 법선벡터 cs = os - oc
+                        vec_l = vec_os - position # 빛 ~ 교점 sl = ol - os
+                    #     intersect_to_light = intersection(position, vec_l, center[kk], radius[kk])
+                    #     distance_from_light.append(intersect_to_light)
+                    # intersect_to_light, cclr = find_min(distance_from_light)
+                    # if intersect_to_light!=9999999999:
+                    #     color = shading(np.array([shader[cclr][1][0], shader[cclr][1][1], shader[cclr][1][2]]), intensity, vec_n, vec_l)
+                    # else:
+                        color = shading(np.array([shader[clr][1][0], shader[clr][1][1], shader[clr][1][2]]), intensity, vec_n, vec_l)
+                        img[j][i] = color
                         # print(img[j][i])
                 # if cnt == 3:
                 #     print('y')
