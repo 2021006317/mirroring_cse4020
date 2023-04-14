@@ -36,17 +36,17 @@ def main():
     projDistance=1.0
     ## light
     light_position=np.array([0,0,0]).astype(np.float64)
-    intensity=np.array([1,1,1]).astype(np.float64)  # how bright the light is.
+    intensity=np.array([1,1,1]).astype(np.float64)
     ## shading
     specularColor = 0
     exponent = 0
-    ## spehre
+    ## sphere
     center = np.array([0,0,0]).astype(np.float64)
     radius = 0
     d_color = "blue"
 
     # parsing xml
-    imgSize=np.array(root.findtext('image').split()).astype(np.int32) # 300 300
+    imgSize=np.array(root.findtext('image').split()).astype(np.int32)
     print(f'imgsize is {imgSize}')
     
     for c in root.findall('camera'):
@@ -85,16 +85,16 @@ def main():
             sp_color = ''
             ref = s.get('ref')
             for shade in shader:
-                if len(shade) == 5: # Phong shader
-                    sp_color = shade[3]
                 if shade[0] == str(ref): # color name
-                    d_color = shade[1] # diffuse color
+                    d_color = shade[1] # diffuse
                     shade_typ = shade[2] # shader type
+                    if len(shade) == 5: # Phong shader
+                        sp_color = shade[3] # specular
                     break
         center=np.array(c.findtext('center').split()).astype(np.float64)
         radius=np.array(c.findtext('radius').split()).astype(np.float64)[0]
         if shade_typ == "Lambertian":
-            surface.append((d_color, center, radius, shade_typ)) # color RGB, center coord, radius length
+            surface.append((d_color, center, radius, shade_typ))
         elif shade_typ == "Phong":
             surface.append((d_color, center, radius, shade_typ, sp_color))
     print(f'surface is {surface}')
@@ -102,7 +102,8 @@ def main():
     for c in root.findall('light'):
         light_position = np.array(c.findtext('position').split()).astype(np.float64)
         intensity = np.array(c.findtext('intensity').split()).astype(np.float64)
-    print(f'light_position is {light_position} and intensity is {intensity}')
+    print(f'light_position is {light_position}')
+    print(f'light intensity is {intensity}')
 
     # 방향 유닛 벡터
     def unit_dir(dir):
@@ -168,7 +169,7 @@ def main():
                 idx = i
         return (idx, min)
 
-    # var window = image plane 의 window center
+    # image plane 의 window center in world frame
     window = viewPoint + unit_dir(viewDir)
     print(f'window ray is {window}')
 
@@ -194,7 +195,7 @@ def main():
 
             # 빛 받는 도형 찾기
             for sphere in surface:
-                vec_ot = viewPoint + vmin*dir_ps # image plane 너머의 공간 상의 점
+                vec_ot = viewPoint + vmin*dir_ps # image plane 너머의 공간 상의 점 (구 위의 점)
                 dir_lt = unit_dir(vec_ot - light_position) # OT - OL = LT
                 ld = intersect_distance(light_position, dir_lt, sphere[1], sphere[2])
                 light_distance.append(ld)
@@ -211,15 +212,15 @@ def main():
                 center = sphere[1]
                 radius = sphere[2]
                 typ = sphere[3]
-                dir_ct = unit_dir(vec_ot - center)
-                dir_tl = unit_dir(light_position - vec_ot)
+                dir_ct = unit_dir(vec_ot - center) # n
+                dir_tl = unit_dir(light_position - vec_ot) # l
 
                 # 보이는 구가 빛을 받는 경우
                 if vidx == lidx:
                     if typ == "Lambertian" :
                         clr = lamb_shading(d_color, intensity, dir_ct, dir_tl)
                     elif typ == "Phong":
-                        dir_tp = unit_dir(viewPoint - vec_ot) # OP - OT
+                        dir_tp = unit_dir(viewPoint - vec_ot) # OP - OT = TP
                         sp_color = sphere[4] # specular coefficient
                         l_clr = lamb_shading(d_color, intensity, dir_ct, dir_tl)
                         p_clr = phong_shading(sp_color, intensity, dir_tp, dir_tl, dir_ct)
