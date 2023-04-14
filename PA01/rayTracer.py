@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*
-# sample_python aims to allow seamless integration with lua.
-# see examples below
-
-import os, sys, pdb, code
+import os
+import sys
+import pdb  # use pdb.set_trace() for debugging
+import code # or use code.interact(local=dict(globals(), **locals()))  for debugging.
 import xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image
@@ -15,227 +13,226 @@ class Color:
     # Gamma corrects this color.
     # @param gamma the gamma value to use (2.2 is generally used).
     def gammaCorrect(self, gamma):
+        gamma = 2.2
         inverseGamma = 1.0 / gamma
         self.color=np.power(self.color, inverseGamma)
 
     def toUINT8(self):
         return (np.clip(self.color, 0, 1)*255).astype(np.uint8)
 
-def ray(p,t,unit_d):
-    return p + t*unit_d
+tree = ET.parse(sys.argv[1])
+root = tree.getroot()
 
-# e: 카메라 평면의 중심 위치를 world에 상대적으로 표현한 것
-# s: 카메라 평면 상의 점 위치를 world에 상대적으로 표현한 것
-# u: 카메라 평면 right vector
-# v: 카메라 평면 up vector
-# w: 카메라 평면 normal vector
+def main():
 
-# dir 은 unit이든 말든 상관없음
-def ray_sphere(point, dir, center, radius):
-    # d*d t^2 + 2(p*d)t + p*p - r^2 = 0
-    temp1 = np.dot(dir, dir)
-    temp2 = np.dot(point, dir)
-    temp3 = np.dot(point, point) - radius**2
-    discriminant = temp2**2 - temp1*temp3
-    if discriminant>=0:
-        t1 = (-temp2 - np.sqrt(discriminant))/temp1
-        t2 = (-temp2 + np.sqrt(discriminant))/temp1
-    return(t1,t2)
+    # set default values
+    ## camera
+    viewPoint=np.array([0,0,0]).astype(np.float64)
+    viewDir=np.array([0,0,-1]).astype(np.float64)
+    viewUp=np.array([0,1,0]).astype(np.float64)
+    viewProjNormal=-1*viewDir
+    viewWidth=1.0
+    viewHeight=1.0
+    projDistance=1.0
+    ## light
+    light_position=np.array([0,0,0]).astype(np.float64)
+    intensity=np.array([1,1,1]).astype(np.float64)  # how bright the light is.
+    ## shading
+    specularColor = 0
+    exponent = 0
+    ## spehre
+    center = np.array([0,0,0]).astype(np.float64)
+    radius = 0
+    d_color = "blue"
 
-# 방향 유닛 벡터
-def unit_dir(dir):
+    # parsing xml
+    imgSize=np.array(root.findtext('image').split()).astype(np.int32) # 300 300
+    print(f'imgsize is {imgSize}')
+    
+    for c in root.findall('camera'):
+        viewPoint=np.array(c.findtext('viewPoint').split()).astype(np.float64)
+        print(f'viewPoint is {viewPoint}')
+        viewDir=np.array(c.findtext('viewDir').split()).astype(np.float64)
+        print(f'viewDir is {viewDir}')
+        projNormal=np.array(c.findtext('projNormal').split()).astype(np.float64)
+        print(f'projNormal is {projNormal}')
+        viewUp=np.array(c.findtext('viewUp').split()).astype(np.float64)
+        print(f'viewUp is {viewUp}')
+        viewWidth=np.array(c.findtext('viewWidth').split()).astype(np.float64)[0]
+        print(f'viewWidth is {viewWidth}')
+        viewHeight=np.array(c.findtext('viewHeight').split()).astype(np.float64)[0]
+        print(f'viewHeight is {viewHeight}')
+        if c.findtext('projDistance') is not None:
+            projDistance = np.array(c.findtext('projDistance').split()).astype(np.float64)[0]
+    print(f'projDistance is {projDistance}')
+
+    shader = []
+    for c in root.findall('shader'):
+        diffuseColor_c=np.array(c.findtext('diffuseColor').split()).astype(np.float64)
+        if c.get('type') == "Lambertian" :
+            shader.append((c.get('name'), diffuseColor_c, c.get('type')))
+        elif c.get('type') == "Phong" :
+            exponent = np.array(c.findtext('exponent').split()).astype(np.int32)[0]
+            specularColor = np.array(c.findtext('specularColor').split()).astype(np.float64)
+            shader.append((c.get('name'), diffuseColor_c, c.get('type'), specularColor, exponent))
+    print(f'shader is {shader}')
+    
+    surface = []
+    for c in root.findall('surface'):
+        for s in c.findall('shader'):
+            d_color = ''
+            shade_typ = ''
+            sp_color = ''
+            ref = s.get('ref')
+            for shade in shader:
+                if len(shade) == 5: # Phong shader
+                    sp_color = shade[3]
+                if shade[0] == str(ref): # color name
+                    d_color = shade[1] # diffuse color
+                    shade_typ = shade[2] # shader type
+                    break
+        center=np.array(c.findtext('center').split()).astype(np.float64)
+        radius=np.array(c.findtext('radius').split()).astype(np.float64)[0]
+        if shade_typ == "Lambertian":
+            surface.append((d_color, center, radius, shade_typ)) # color RGB, center coord, radius length
+        elif shade_typ == "Phong":
+            surface.append((d_color, center, radius, shade_typ, sp_color))
+    print(f'surface is {surface}')
+
+    for c in root.findall('light'):
+        light_position = np.array(c.findtext('position').split()).astype(np.float64)
+        intensity = np.array(c.findtext('intensity').split()).astype(np.float64)
+    print(f'light_position is {light_position} and intensity is {intensity}')
+
+    # 방향 유닛 벡터
+    def unit_dir(dir):
         t = 1/np.sqrt(np.dot(dir,dir))
         udir = t*dir
         return udir
 
-def ray(start, res_x, res_y, unit_u, unit_v, single_x, single_y):
-        ray = start + unit_u*res_x*single_x + unit_v*res_y*single_y
-        return ray #np.array
-
-def find_min(list):
-    min=list[0]
-    idx=0
-    for i in range(len(list)):
-        if list[i] <= min:
-            min = list[i]
-            idx=i
-    return (min,idx)
-
-def raytrace(surface, ray, point):
-    distance=np.array([])
-    for k in surface:
-        center = k.center
-        radius = k.radius
-        center_to_point = np.array([])
-        for i in range(0,3):
-            center_to_point = np.append(center_to_point, point[i]-center[i])
-        t = ray_sphere(center_to_point, ray, center, radius)
-        if t[0] >=0 : distance = np.append(distance, t[0])
-        else: distance = np.append(distance, t[1])
-    tup = find_min(distance)
-    return tup
-
-def shadow(point, s, light):
-    pass
-def shading_lamb():
-    pass
-
-def shading_phong():
-    pass
-
-
-
-
-
-def main():
-
-    tree = ET.parse(sys.argv[1])
-    root = tree.getroot()
-
-    # set default values
-    viewPoint=np.array([0,0,0]).astype(np.float64)
-    viewDir=np.array([0,0,-1]).astype(np.float64) # direction toward object
-    viewUp=np.array([0,1,0]).astype(np.float64) # orientation of image
-    viewProjNormal=-1*viewDir  # you can safely assume this. (no examples will use shifted perspective camera) # projection plane 의 normal vector(negating has no effect. default, view direction 과 동일)
-    viewWidth=1.0 # dimensions of viewing window on the image plane
-    viewHeight=1.0 # ""
-    projDistance=1.0 # d. image 사각형 ~ projection center distance. 근데? projection center 이 viewpoint 라고 하네요.
-
-    position=np.array([0,0,0]).astype(np.float64)   # light point
-    intensity=np.array([1,1,1]).astype(np.float64)  # how bright the light is.
-
-    center = []
-    radius = []
-
-    imgSize=np.array(root.findtext('image').split()).astype(np.int32) # 300 300
-    print(f'imgsize is {imgSize}')
-    
-    # parsing xml
-    for c in root.findall('camera'):
-        viewPoint=np.array(c.findtext('viewPoint').split()).astype(np.float64)
-        viewDir=np.array(c.findtext('viewDir').split()).astype(np.float64)
-        projNormal=np.array(c.findtext('projNormal').split()).astype(np.float64)
-        viewUp=np.array(c.findtext('viewUp').split()).astype(np.float64)
-        viewWidth=np.array(c.findtext('viewWidth').split()).astype(np.float64)[0]
-        viewHeight=np.array(c.findtext('viewHeight').split()).astype(np.float64)[0]
-    
-    shader = []
-    for c in root.findall('shader'):
-        diffuseColor_c=np.array(c.findtext('diffuseColor').split()).astype(np.float64)
-        shader.append((c.get('name'), diffuseColor_c, c.get('type')))
-
-    count=0
-    for c in root.findall('surface'):
-        center.append(np.array(c.findtext('center').split()).astype(np.float64))
-        radius.append(np.array(c.findtext('radius').split()).astype(np.float64)[0])
-        count+=1
-
-    for c in root.findall('light'):
-        position = np.array(c.findtext('position').split()).astype(np.float64)
-        intensity = np.array(c.findtext('intensity').split()).astype(np.float64)
-
-    w = unit_dir(projNormal)
-    u = unit_dir(np.cross(w, viewUp))
-    v = unit_dir(np.cross(w,u))
-    
-    # kd: 물체의 밝기, I: 빛의 밝기(색) , max(0, n'l): 면적당 받는 빛의 양(밝기)
-    def shading(kd, I, n, l):
+    # lambertian shading
+    def lamb_shading(kd, I, n, l):
         m = max(0, np.dot(n,l))
         ldm = np.array([kd[0] * I[0], kd[1] * I[1], kd[2] * I[2]])
         ld = ldm*m
-        return kd+ld
+        return ld
+        
+    # blinn_phong shading
+    def phong_shading(ks, I, v, l, n):
+        h = (v+l)/np.sqrt(np.dot(v+l,v+l))
+        m = max(0,np.dot(n,h))**exponent
+        ls = np.array([ks[0]*I[0], ks[1]*I[1], ks[2]*I[2]])*m
+        return ls
 
-    # s : image window 상의 pixel의 world frame 상 좌표
-    # ud, lr 은 단위벡터
-    # e: window center
-    # e + lr*(i-center_x) + viewUp*(center_y-j) - dw
-    def vector_os(e, ud, lr, n, i, j):
-        center_x = imgSize[0]/2
-        center_y = imgSize[1]/2
+    # camera frame coordination
+    vec_u = unit_dir(np.cross(viewDir, viewUp))
+    vec_w = (-1)*unit_dir(viewDir)
+    vec_v = unit_dir(np.cross(vec_w, vec_u))
+    print(f'(u,v,w) is {(vec_u, vec_v, vec_w)}')
 
-        #! imgWidth, imgHeight
-        s = e + lr*(i-center_x) + ud*(j-center_y) - 400 * n
+    # world frame coordination through viewPoint p on image plane
+    def vector_os(i, j):
+        coord_u = (-1)*viewWidth/2 + viewWidth*(i+0.5)/imgSize[0]
+        coord_v = viewHeight/2  - viewHeight*(j+0.5)/imgSize[1]
+        s = viewPoint + coord_u*vec_u + coord_v*vec_v - projDistance*vec_w
         return s
-
-    # single_x = single_pixel(viewWidth, imgSize[0])
-    # single_y = single_pixel(viewHeight, imgSize[1])
-
-    # Create an empty image
-    channels=3
-    img = np.zeros((imgSize[1], imgSize[0], channels), dtype=np.uint8) # 0으로 된 3x300 행렬 300개를 담은 리스트
-    img[:,:]=0
-
     
-    for i in np.arange(imgSize[0]): # 0~299
-        for j in np.arange(imgSize[1]):
-            ray = viewPoint
-    # replace the code block below!
-    # vector oe. e는 image plane (window) center
+    # |p+td-c|=radius
+    # p+td = ray, c = sphere center
+    def intersect_distance(p, unit_d, sphere_center, sphere_radius):
+        cp_point = p - sphere_center # OP - OC = CP
+        discriminant = (np.dot(unit_d, cp_point))**2 - np.dot(cp_point,cp_point) + sphere_radius**2
+        if discriminant >=0:
+            t1 = (-1)*np.dot(unit_d, cp_point) - np.sqrt(discriminant)
+            t2 = (-1)*np.dot(unit_d, cp_point) + np.sqrt(discriminant)
+            if t1>=0:
+                if t2>=0:
+                    res = t1 if t1<=t2 else t2
+                else:
+                    res = t1
+                return res
+            elif t2>=0:
+                return t2
+            else:
+                return 99999999
+        else:
+            return 99999999
+
+    def find_min(d_list):
+        min = d_list[0]
+        idx = 0
+
+        for i in range(len(d_list)):
+            if min > d_list[i]:
+                min = d_list[i]
+                idx = i
+        return (idx, min)
+
+    # var window = image plane 의 window center
     window = viewPoint + unit_dir(viewDir)
     print(f'window ray is {window}')
 
-        # |p+td-c|=radius
-    def intersection(start_point, unit_d, sphere_center, sphere_radius):
-        center_to_point = np.array([])
-        for i in range(0,channels):
-            center_to_point = np.append(center_to_point, start_point[i] - sphere_center[i])
-        temp1=np.dot(unit_d, unit_d)
-        temp2=np.dot(unit_d, center_to_point)
-        temp3=np.dot(center_to_point, center_to_point)-sphere_radius**2
-        discriminant = temp2**2 - temp1*temp3 # D/4 = b'^2 - ac
-        
-        if  discriminant >= 0:
-            quadratic_min = (-temp2 - np.sqrt(discriminant)) /temp1
-            quadratic_max = (-temp2 + np.sqrt(discriminant)) /temp1
-            if quadratic_min>=0:
-                return quadratic_min
-            elif quadratic_max>=0:
-                return quadratic_max
-            else:
-                return 9999999999
-        else:
-            return 9999999999
-        
-    black=Color(0,0,0)
-    for i in np.arange(imgSize[0]): # 0~299
-        for j in np.arange(imgSize[1]):
-                distance=[]
-                img[j][i] = black.toUINT8()
-                for k in range(count):
-                    direction = np.array([])
-                    dot = vector_os(window, up, right, n, i, j)
-                    direction = dot - viewPoint
-                    direction = unit_dir(direction)
-                    intersect = intersection(viewPoint, direction, center[k], radius[k])
-                    distance.append(intersect)
-                intersect, clr = find_min(distance)
-                if intersect != 9999999999:
-                    
-                    if shader[clr][2] == 'Lambertian':
-                        distance_from_light=[]
-                        # for kk in range(count):
-                        vec_os = position + intersect*direction # 구 위의 교점 oc
-                        vec_n = vec_os - center[clr] # 교점의 법선벡터 cs = os - oc
-                        vec_l = vec_os - position # 빛 ~ 교점 sl = ol - os
-                    #     intersect_to_light = intersection(position, vec_l, center[kk], radius[kk])
-                    #     distance_from_light.append(intersect_to_light)
-                    # intersect_to_light, cclr = find_min(distance_from_light)
-                    # if intersect_to_light!=9999999999:
-                    #     color = shading(np.array([shader[cclr][1][0], shader[cclr][1][1], shader[cclr][1][2]]), intensity, vec_n, vec_l)
-                    # else:
-                        color = shading(np.array([shader[clr][1][0], shader[clr][1][1], shader[clr][1][2]]), intensity, vec_n, vec_l)
-                        img[j][i] = color
-                        # print(img[j][i])
-                # if cnt == 3:
-                #     print('y')
+    # Create an empty image
+    channels=3
+    img = np.zeros((imgSize[1], imgSize[0], channels), dtype=np.uint8)
+    img[:,:]=0
 
-    # for i in np.arange(count):
-    #     ld = 
-    # for x in np.arange(imgSize[0]):
-    #     img[5][x]=[255,255,255]
+    # main rendering
+    for i in np.arange(imgSize[0]):
+        for j in np.arange(imgSize[1]):
+            img[j][i] = Color(0,0,0).toUINT8()
+            vec_ij = vector_os(i,j)
+            view_distance = []
+            light_distance = []
+
+            # 눈에 보이는 도형 찾기
+            for sphere in surface:
+                dir_ps = unit_dir(vec_ij - viewPoint) # OS - OP = PS
+                vd = intersect_distance(viewPoint, dir_ps, sphere[1], sphere[2])
+                view_distance.append(vd)
+            vidx, vmin = find_min(view_distance)
+
+            # 빛 받는 도형 찾기
+            for sphere in surface:
+                vec_ot = viewPoint + vmin*dir_ps # image plane 너머의 공간 상의 점
+                dir_lt = unit_dir(vec_ot - light_position) # OT - OL = LT
+                ld = intersect_distance(light_position, dir_lt, sphere[1], sphere[2])
+                light_distance.append(ld)
+            lidx, lmin = find_min(light_distance)
+                
+            # 보이는 구가 없는 경우
+            if vmin == 99999999:
+                img[j][i] = Color(0,0,0).toUINT8()
+            
+            # 보이는 구가 있는 경우
+            else:
+                sphere = surface[vidx]
+                d_color = sphere[0] # diffuse coefficient
+                center = sphere[1]
+                radius = sphere[2]
+                typ = sphere[3]
+                dir_ct = unit_dir(vec_ot - center)
+                dir_tl = unit_dir(light_position - vec_ot)
+
+                # 보이는 구가 빛을 받는 경우
+                if vidx == lidx:
+                    if typ == "Lambertian" :
+                        clr = lamb_shading(d_color, intensity, dir_ct, dir_tl)
+                    elif typ == "Phong":
+                        dir_tp = unit_dir(viewPoint - vec_ot) # OP - OT
+                        sp_color = sphere[4] # specular coefficient
+                        l_clr = lamb_shading(d_color, intensity, dir_ct, dir_tl)
+                        p_clr = phong_shading(sp_color, intensity, dir_tp, dir_tl, dir_ct)
+                        clr = p_clr + l_clr
+                    gam_color = Color(clr[0], clr[1], clr[2])
+                    gam_color.gammaCorrect(2.2)
+                    img[j][i] = gam_color.toUINT8()
+                
+                # 보이는 구가 빛을 받지 못하는 경우
+                elif vidx != lidx:
+                    img[j][i] = Color(0,0,0).toUINT8()
 
     rawimg = Image.fromarray(img, 'RGB')
-    #rawimg.save('out.png')
     rawimg.save(sys.argv[1]+'.png')
     
 if __name__=="__main__":
