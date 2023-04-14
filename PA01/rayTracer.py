@@ -211,7 +211,7 @@ def main():
             # 보이는 구가 있는 경우
             else:
                 sphere = surface[vidx]
-                d_color = sphere[0] # diffuse coefficient
+                kd = sphere[0]
                 center = sphere[1]
                 radius = sphere[2]
                 typ = sphere[3]
@@ -221,10 +221,10 @@ def main():
 
                 # 보이는 구가 빛을 받는 경우
                 if vidx == lidx:
-                    clr = lamb_shading(d_color, intensity, n, l)
+                    clr = lamb_shading(kd, intensity, n, l)
                     if typ == "Phong":
-                        sp_color = sphere[4] # specular coefficient
-                        p_clr = phong_shading(sp_color, intensity, v, l, n)
+                        ks = sphere[4]
+                        p_clr = phong_shading(ks, intensity, v, l, n)
                         clr += p_clr
                     gam_color = Color(clr[0], clr[1], clr[2])
                     gam_color.gammaCorrect(2.2)
