@@ -41,9 +41,9 @@ def main():
     specularColor = 0
     exponent = 0
     ## sphere
-    center = np.array([0,0,0]).astype(np.float64)
+    center = np.array([1,1,1]).astype(np.float64)
     radius = 0
-    d_color = "blue"
+    d_color = "black"
 
     # parsing xml
     imgSize=np.array(root.findtext('image').split()).astype(np.int32)
@@ -183,23 +183,26 @@ def main():
         for j in np.arange(imgSize[1]):
             img[j][i] = Color(0,0,0).toUINT8()
             vec_ij = vector_os(i,j)
+            dir_ps = unit_dir(vec_ij - viewPoint) # OS - OP = PS
             view_distance = []
             light_distance = []
 
             # 눈에 보이는 도형 찾기
             for sphere in surface:
-                dir_ps = unit_dir(vec_ij - viewPoint) # OS - OP = PS
                 vd = intersect_distance(viewPoint, dir_ps, sphere[1], sphere[2])
                 view_distance.append(vd)
             vidx, vmin = find_min(view_distance)
+            
+            # image plane 너머의 공간 상의 점 T (구 위의 점)
+            vec_ot = viewPoint + vmin*dir_ps
+            dir_ct = unit_dir(vec_ot - center)
+            dir_lt = unit_dir(vec_ot - light_position) # OT - OL = LT
 
             # 빛 받는 도형 찾기
             for sphere in surface:
-                vec_ot = viewPoint + vmin*dir_ps # image plane 너머의 공간 상의 점 (구 위의 점)
-                dir_lt = unit_dir(vec_ot - light_position) # OT - OL = LT
                 ld = intersect_distance(light_position, dir_lt, sphere[1], sphere[2])
                 light_distance.append(ld)
-            lidx, lmin = find_min(light_distance)
+            lidx = find_min(light_distance)[0]
                 
             # 보이는 구가 없는 경우
             if vmin == 99999999:
@@ -212,19 +215,17 @@ def main():
                 center = sphere[1]
                 radius = sphere[2]
                 typ = sphere[3]
-                dir_ct = unit_dir(vec_ot - center) # n
-                dir_tl = unit_dir(light_position - vec_ot) # l
+                v = -dir_ps # =dir_sp=dir_tp. p-s-t가 일직선상에 있기 때문.
+                n = dir_ct
+                l = -dir_lt
 
                 # 보이는 구가 빛을 받는 경우
                 if vidx == lidx:
-                    if typ == "Lambertian" :
-                        clr = lamb_shading(d_color, intensity, dir_ct, dir_tl)
-                    elif typ == "Phong":
-                        dir_tp = unit_dir(viewPoint - vec_ot) # OP - OT = TP
+                    clr = lamb_shading(d_color, intensity, n, l)
+                    if typ == "Phong":
                         sp_color = sphere[4] # specular coefficient
-                        l_clr = lamb_shading(d_color, intensity, dir_ct, dir_tl)
-                        p_clr = phong_shading(sp_color, intensity, dir_tp, dir_tl, dir_ct)
-                        clr = p_clr + l_clr
+                        p_clr = phong_shading(sp_color, intensity, v, l, n)
+                        clr += p_clr
                     gam_color = Color(clr[0], clr[1], clr[2])
                     gam_color.gammaCorrect(2.2)
                     img[j][i] = gam_color.toUINT8()
