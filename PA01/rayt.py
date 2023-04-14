@@ -174,7 +174,7 @@ def main():
         if discriminant >=0:
             t1 = -np.dot(unit_d, lc_point) - np.sqrt(discriminant)
             t2 = -np.dot(unit_d, lc_point) + np.sqrt(discriminant)
-            if t1<0 and t2>=0: # intersected, not blocked -> not shadow
+            if t1>=0 or t2>=0: # intersected, not blocked -> not shadow
                 return 0
             else: # not intersected || intersected but blocked -> shadow
                 return 1
@@ -197,17 +197,16 @@ def main():
             img[j][i] = Color(0,0,0).toUINT8()
             vec_ij = vector_os(i,j)
             view_distance = []
-            light_distance = []
             # surface = [(color, center, radius, shade_typ), (), ...]
             for sphere in surface:
                 # 거리를 리스트에 넣는다.
-                dir_ps = vec_ij - viewPoint
-                vd = intersect_distance(viewPoint, unit_dir(dir_ps), sphere[1], sphere[2])
+                dir_pi = vec_ij - viewPoint
+                vd = intersect_distance(viewPoint, unit_dir(dir_pi), sphere[1], sphere[2])
                 view_distance.append(vd)
             # 최소 거리를 구한다.
             vidx, vmin = find_min(view_distance)
 
-            prime_s = viewPoint + vmin*viewDir
+            prime_s = viewPoint + vmin*unit_dir(dir_pi)
             dir_ls = prime_s - position
             
             # 내눈에 보인다.
@@ -219,7 +218,9 @@ def main():
                 typ = sphere[3]
                 vec_cs = unit_dir(prime_s - center)
                 vec_sl = unit_dir(position - prime_s)
-                img[j][i] = Color(color[0], color[1], color[2]).toUINT8()
+                gam_color = Color(color[0], color[1], color[2])
+                gam_color.gammaCorrect(2.2)
+                img[j][i] = gam_color.toUINT8()
 
                 # 빛이랑 닿는지 확인.
                 ld = intersect_distance(position, unit_dir(dir_ls), center, radius)
@@ -227,22 +228,23 @@ def main():
                 # 빛이랑 닿는다.
                 if ld != 99999999:
                     is_shadow = shadow(position, unit_dir(dir_ls), center, radius)
-                    if 1:
+                    if is_shadow==0:
                         if typ == "Lambertian" :
-                            clr = lamb_shading(color, intensity, unit_dir(prime_s + vec_cs), unit_dir(prime_s + vec_sl))
-                            # print(f'clr is {clr}')
-                            img[j][i] = Color(clr[0], clr[1], clr[2]).toUINT8()
+                            clr = lamb_shading(color, intensity, unit_dir(vec_cs), unit_dir(vec_sl))
+                            gam_color = Color(clr[0], clr[1], clr[2])
+                            gam_color.gammaCorrect(2.2)
+                            img[j][i] = gam_color.toUINT8()
                         elif typ == "Phong":
                             pass
-                    else:
+                    elif is_shadow==1:
                         img[j][i] = Color(0,0,0).toUINT8()
                 # view 최소거리 && light 최소거리 -> shading. type 확인후 알잘 함수. kd+ld
                 
-                # # 빛이랑 안닿음.
-                # else:
-                #     is_shadow = shadow(position, unit_dir(vec_sl), center, radius)
-                #     if is_shadow == 1:
-                #         img[j][i] = Color(0,0,0).toUINT8()
+                # 빛이랑 안닿음.
+                else:
+                    is_shadow = shadow(position, unit_dir(vec_sl), center, radius)
+                    # if is_shadow == 1:
+                    img[j][i] = Color(0,0,0).toUINT8()
 
                 '''
                 # 빛이 닿음.
