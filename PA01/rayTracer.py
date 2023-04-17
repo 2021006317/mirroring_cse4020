@@ -99,11 +99,12 @@ def main():
             surface.append((d_color, center, radius, shade_typ, sp_color))
     print(f'surface is {surface}')
 
+    lights = []
     for c in root.findall('light'):
         light_position = np.array(c.findtext('position').split()).astype(np.float64)
         intensity = np.array(c.findtext('intensity').split()).astype(np.float64)
-    print(f'light_position is {light_position}')
-    print(f'light intensity is {intensity}')
+        lights.append((light_position, intensity))
+    print(f'lights are {lights}')
 
     # 방향 유닛 벡터
     def unit_dir(dir):
@@ -181,7 +182,10 @@ def main():
     # main rendering
     for i in np.arange(imgSize[0]):
         for j in np.arange(imgSize[1]):
-            img[j][i] = Color(0,0,0).toUINT8()
+            # gam_color = Color(0,0,0)
+            # gam_color.gammaCorrect(2.2)
+            # img[j][i] = gam_color.toUINT8()
+
             vec_ij = vector_os(i,j)
             dir_ps = unit_dir(vec_ij - viewPoint) # OS - OP = PS
             view_distance = []
@@ -193,23 +197,29 @@ def main():
                 view_distance.append(vd)
             vidx, vmin = find_min(view_distance)
             
-            # image plane 너머의 공간 상의 점 T (구 위의 점)
-            vec_ot = viewPoint + vmin*dir_ps
-            dir_ct = unit_dir(vec_ot - center)
-            dir_lt = unit_dir(vec_ot - light_position) # OT - OL = LT
-
-            # 빛 받는 도형 찾기
-            for sphere in surface:
-                ld = intersect_distance(light_position, dir_lt, sphere[1], sphere[2])
-                light_distance.append(ld)
-            lidx = find_min(light_distance)[0]
-                
             # 보이는 구가 없는 경우
             if vmin == 99999999:
-                img[j][i] = Color(0,0,0).toUINT8()
+                gam_color = Color(0,0,0)
+                gam_color.gammaCorrect(2.2)
+                img[j][i] = gam_color.toUINT8()
             
             # 보이는 구가 있는 경우
             else:
+                # image plane 너머의 공간 상의 점 T (구 위의 점)
+                vec_ot = viewPoint + vmin*dir_ps
+                dir_ct = unit_dir(vec_ot - center)
+                # for light in lights:
+                    # light_distance = []
+                    # light_position = light[0]
+                    # intensity = light[1]
+                dir_lt = unit_dir(vec_ot - light_position) # OT - OL = LT
+
+                # 빛 받는 도형 찾기
+                for sphere in surface:
+                    ld = intersect_distance(light_position, dir_lt, sphere[1], sphere[2])
+                    light_distance.append(ld)
+                lidx = find_min(light_distance)[0]
+                    
                 sphere = surface[vidx]
                 kd = sphere[0]
                 center = sphere[1]
@@ -228,11 +238,13 @@ def main():
                         clr += p_clr
                     gam_color = Color(clr[0], clr[1], clr[2])
                     gam_color.gammaCorrect(2.2)
-                    img[j][i] = gam_color.toUINT8()
+                    img[j][i] += gam_color.toUINT8()
                 
                 # 보이는 구가 빛을 받지 못하는 경우
                 elif vidx != lidx:
-                    img[j][i] = Color(0,0,0).toUINT8()
+                    gam_color = Color(0,0,0)
+                    gam_color.gammaCorrect(2.2)
+                    img[j][i] += gam_color.toUINT8()
 
     rawimg = Image.fromarray(img, 'RGB')
     rawimg.save(sys.argv[1]+'.png')
